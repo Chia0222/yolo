@@ -69,6 +69,37 @@ from utils.segment.metrics import Metrics, ap_per_class_box_and_mask
 from utils.segment.plots import plot_images_and_masks
 from utils.torch_utils import de_parallel, select_device, smart_inference_mode
 
+import numpy as np
+
+def calculate_iou_for_dataset(pred_masks, gt_masks):
+    def mask_iou(pred_mask, gt_mask):
+        intersection = np.logical_and(pred_mask, gt_mask)
+        union = np.logical_or(pred_mask, gt_mask)
+        iou = np.sum(intersection) / np.sum(union) if np.sum(union) > 0 else 0
+        return iou
+
+    iou_values = [mask_iou(pred, gt) for pred, gt in zip(pred_masks, gt_masks)]
+    return iou_values
+
+import matplotlib.pyplot as plt
+
+def plot_iou(iou_values, filename='iou_plot.png'):
+    """
+    Plot IoU values and save the plot as a PNG file.
+
+    Args:
+        iou_values (list): List of IoU values.
+        filename (str): Name of the file to save the plot.
+    """
+    plt.figure(figsize=(10, 6))
+    plt.plot(iou_values, marker='o', linestyle='-', color='b')
+    plt.xlabel('Index')
+    plt.ylabel('IoU')
+    plt.title('IoU Metrics Plot')
+    plt.grid(True)
+    plt.savefig(filename)  # Save the plot as a PNG file
+    plt.close()  # Close the plot to free up memory
+
 
 def save_one_txt(predn, save_conf, shape, file):
     """Saves detection results in txt format; includes class, xywh (normalized), optionally confidence if `save_conf` is
@@ -150,15 +181,6 @@ def process_batch(detections, labels, iouv, pred_masks=None, gt_masks=None, over
             correct[matches[:, 1].astype(int), i] = True
     return torch.tensor(correct, dtype=torch.bool, device=iouv.device)
 
-def plot_iou_distribution(iou_values, save_dir):
-    plt.figure(figsize=(10, 6))
-    plt.hist(iou_values, bins=50, color='blue', alpha=0.7)
-    plt.title('IoU Distribution')
-    plt.xlabel('IoU')
-    plt.ylabel('Frequency')
-    plt.grid(True)
-    plt.savefig(save_dir / "iou_distribution.png")
-    plt.close()
 
 @smart_inference_mode()
 def run(
@@ -168,7 +190,6 @@ def run(
     imgsz=640,  # inference size (pixels)
     conf_thres=0.001,  # confidence threshold
     iou_thres=0.6,  # NMS IoU threshold
-     iou_values=[],
     max_det=300,  # maximum detections per image
     task="val",  # train, val, test, speed or study
     device="",  # cuda device, i.e. 0 or 0,1,2,3 or cpu
@@ -303,12 +324,7 @@ def run(
             im = im.half() if half else im.float()  # uint8 to fp16/32
             im /= 255  # 0 - 255 to 0.0 - 1.0
             nb, _, height, width = im.shape  # batch size, channels, height, width
-        # Run model
-        pred = model(im, augment=augment, visualize=False)
-        
-        # NMS
-        pred = non_max_suppression(pred, conf_thres, iou_thres, labels=None, multi_label=True, agnostic=single_cls, max_det=max_det, nm=nm)
-            
+
         # Inference
         with dt[1]:
             preds, protos, train_out = model(im) if compute_loss else (*model(im, augment=augment)[:2], None)
@@ -334,10 +350,7 @@ def run(
             correct_masks = torch.zeros(npr, niou, dtype=torch.bool, device=device)  # init
             correct_bboxes = torch.zeros(npr, niou, dtype=torch.bool, device=device)  # init
             seen += 1
-            # Compute IoU and store
-            iou = mask_iou(pred_masks.view(pred_masks.shape[0], -1), gt_masks.view(gt_masks.shape[0], -1))
-            iou_values.extend(iou.cpu().numpy())  # Store IoU values
-            
+
             if npr == 0:
                 if nl:
                     stats.append((correct_masks, correct_bboxes, *torch.zeros((2, 0), device=device), labels[:, 0]))
@@ -425,16 +438,9 @@ def run(
     if plots:
         confusion_matrix.plot(save_dir=save_dir, names=list(names.values()))
     # callbacks.run('on_val_end')
-    
+
     mp_bbox, mr_bbox, map50_bbox, map_bbox, mp_mask, mr_mask, map50_mask, map_mask = metrics.mean_results()
 
-    # Compute mean IoU over the entire dataset
-    mean_iou = np.mean(iou_values)
-    LOGGER.info(f"Mean IoU: {mean_iou:.4f}")
-
-    # Plot IoU distribution
-    plot_iou_distribution(iou_values, save_dir)
-    
     # Save JSON
     if save_json and len(jdict):
         w = Path(weights[0] if isinstance(weights, list) else weights).stem if weights is not None else ""  # weights
@@ -546,13 +552,11 @@ if __name__ == "__main__":
     opt = parse_opt()
     main(opt)
 
-    # Save IoU values to a text file
-    with open('ious.txt', 'w') as f:
-        for iou in mean_ious:
-            f.write(f'{iou}\n')
-        f.write(f'Highest IoU: {mean_ious.max()}\n')
-        f.write(f'Last IoU: {mean_ious[-1]}\n')
+    pred_masks = [np.random.randint(0, 2, (256, 256)) for _ in range(10)]
+    gt_masks = [np.random.randint(0, 2, (256, 256)) for _ in range(10)]
+
+    # Calculate IoU values
+    iou_values = calculate_iou_for_dataset(pred_masks, gt_masks)
     
-    # Print the highest and last IoU values
-    print(f"Highest IoU: {mean_ious.max()}")
-    print(f"Last IoU: {mean_ious[-1]}")
+    # Plot IoU values
+    plot_iou(iou_values, filename='IoU_plot_val.png')
