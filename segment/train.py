@@ -96,6 +96,8 @@ LOCAL_RANK = int(os.getenv("LOCAL_RANK", -1))  # https://pytorch.org/docs/stable
 RANK = int(os.getenv("RANK", -1))
 WORLD_SIZE = int(os.getenv("WORLD_SIZE", 1))
 GIT_INFO = check_git_info()
+pred_masks = [torch.tensor([[0, 1], [1, 1]]), torch.tensor([[1, 0], [0, 1]])]
+gt_masks = [torch.tensor([[0, 1], [1, 0]]), torch.tensor([[1, 0], [0, 1]])]
     
 def train(hyp, opt, device, callbacks):
     """
@@ -760,33 +762,43 @@ def run(**kwargs):
     main(opt)
     return opt
 
-def calculate_iou_for_dataset(pred_masks, gt_masks):
-    def mask_iou(pred_mask, gt_mask):
-        pred_mask = pred_mask.cpu().numpy()
-        gt_mask = gt_mask.cpu().numpy()
-        
-        intersection = np.logical_and(pred_mask, gt_mask)
-        union = np.logical_or(pred_mask, gt_mask)
-        iou = np.sum(intersection) / np.sum(union) if np.sum(union) > 0 else 0
-        return iou
+def mask_iou(pred_mask, gt_mask):
+    pred_mask = pred_mask.cpu().numpy()
+    gt_mask = gt_mask.cpu().numpy()
+    
+    intersection = np.logical_and(pred_mask, gt_mask)
+    union = np.logical_or(pred_mask, gt_mask)
+    iou = np.sum(intersection) / np.sum(union) if np.sum(union) > 0 else 0
+    return iou
 
-    iou_values = [mask_iou(pred, gt) for pred, gt in zip(pred_masks, gt_masks)]
-    return iou_values
+# Compute IoU values
+iou_values = [mask_iou(pred, gt) for pred, gt in zip(pred_masks, gt_masks)]
 
-def plot_iou(iou_values, filename='iou_plot.png'):
+# Dummy epoch values for demonstration
+epochs = range(1, len(iou_values) + 1)
+
+def plot_iou(iou_values, epochs, filename='iou_plot.png'):
     """
     Plot IoU values and save the plot as a PNG file.
 
     Args:
         iou_values (list): List of IoU values.
+        epochs (list): List of epoch numbers.
         filename (str): Name of the file to save the plot.
     """
     plt.figure(figsize=(10, 6))
-    plt.plot(iou_values, marker='o', linestyle='-', color='b')
-    plt.xlabel('Index')
+    plt.plot(epochs, iou_values, marker='o', linestyle='-', color='blue', label='IoU')
+
+    # Annotating the IoU values on the plot
+    for i, v in enumerate(iou_values):
+        plt.text(epochs[i], v + 0.01, f'{v:.2f}', ha='center', va='bottom')
+
+    plt.xlabel('Epoch')
     plt.ylabel('IoU')
-    plt.title('IoU Metrics Plot')
+    plt.title('IoU vs. Epochs During Training')
+    plt.ylim(0, 1.0)  # Setting y-axis limits to 0-1 (typical range for IoU)
     plt.grid(True)
+    plt.legend()
     plt.savefig(filename)  # Save the plot as a PNG file
     plt.close()  # Close the plot to free up memory
 
@@ -794,11 +806,4 @@ if __name__ == "__main__":
     opt = parse_opt()
     main(opt)
 
-    pred_masks = torch.randint(0, 2, (5, 160*160)).float()  # Example predicted masks
-    gt_masks = torch.randint(0, 2, (5, 160*160)).float()  # Example ground truth masks
-
-    # Calculate IoU values
-    iou_values = calculate_iou_for_dataset(pred_masks, gt_masks)
-    
-    # Plot IoU values
-    plot_iou(iou_values, filename='IoU_plot_train.png')
+    plot_iou(iou_values, epochs, filename='iou_plot.png')
