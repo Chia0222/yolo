@@ -94,59 +94,6 @@ RANK = int(os.getenv("RANK", -1))
 WORLD_SIZE = int(os.getenv("WORLD_SIZE", 1))
 GIT_INFO = check_git_info()
 
-import numpy as np
-import matplotlib.pyplot as plt
-from skimage import measure
-
-def calculate_iou(pred_mask, gt_mask):
-    """
-    Calculate Intersection over Union (IoU) between predicted and ground truth masks.
-
-    Args:
-        pred_mask (numpy array): Predicted binary mask.
-        gt_mask (numpy array): Ground truth binary mask.
-
-    Returns:
-        float: IoU value.
-    """
-    intersection = np.logical_and(pred_mask, gt_mask).sum()
-    union = np.logical_or(pred_mask, gt_mask).sum()
-    if union == 0:
-        return 0.0
-    return intersection / union
-
-def calculate_iou_for_dataset(pred_masks, gt_masks):
-    """
-    Calculate IoU for a dataset of predicted and ground truth masks.
-
-    Args:
-        pred_masks (list of numpy arrays): List of predicted masks.
-        gt_masks (list of numpy arrays): List of ground truth masks.
-
-    Returns:
-        list: IoU values for each mask pair.
-    """
-    iou_values = []
-    for pred_mask, gt_mask in zip(pred_masks, gt_masks):
-        iou = calculate_iou(pred_mask, gt_mask)
-        iou_values.append(iou)
-    return iou_values
-
-def plot_iou(iou_values, threshold_values):
-    """
-    Plot IoU values against threshold values.
-
-    Args:
-        iou_values (list): List of IoU values.
-        threshold_values (list): List of IoU thresholds.
-    """
-    plt.figure(figsize=(10, 6))
-    plt.plot(threshold_values, iou_values, marker='o', linestyle='-', color='b')
-    plt.xlabel('IoU Threshold')
-    plt.ylabel('Average IoU')
-    plt.title('IoU Metrics Plot')
-    plt.grid(True)
-    plt.show()
 
 def train(hyp, opt, device, callbacks):
     """
@@ -815,14 +762,3 @@ def run(**kwargs):
 if __name__ == "__main__":
     opt = parse_opt()
     main(opt)
-    
-    # Example masks
-    pred_masks = [np.random.randint(0, 2, (256, 256)) for _ in range(10)]
-    gt_masks = [np.random.randint(0, 2, (256, 256)) for _ in range(10)]
-
-    # Calculate IoU values
-    iou_values = calculate_iou_for_dataset(pred_masks, gt_masks)
-    
-    # Plot IoU
-    thresholds = np.linspace(0.5, 1.0, len(iou_values))
-    plot_iou(iou_values, thresholds)
