@@ -77,6 +77,7 @@ from utils.plots import plot_evolve, plot_labels
 from utils.segment.dataloaders import create_dataloader
 from utils.segment.loss import ComputeLoss
 from utils.segment.metrics import KEYS, fitness
+from utils.segment.general import mask_iou, masks_iou
 from utils.segment.plots import plot_images_and_masks, plot_results_with_masks
 from utils.torch_utils import (
     EarlyStopping,
@@ -762,3 +763,35 @@ def run(**kwargs):
 if __name__ == "__main__":
     opt = parse_opt()
     main(opt)
+
+    predicted_masks = torch.randint(0, 2, (5, 160*160)).float()  # Example predicted masks
+    ground_truth_masks = torch.randint(0, 2, (5, 160*160)).float()  # Example ground truth masks
+
+    # Calculate IoU for each pair
+    mean_ious = masks_iou(predicted_masks, ground_truth_masks)
+    
+    # Get the last and highest IoU values
+    last_iou = mean_ious[-1].item()
+    highest_iou = mean_ious.max().item()
+    
+    # Print the values
+    print(f"Last IoU value: {last_iou}")
+    print(f"Highest IoU value: {highest_iou}")
+    
+    # Save the IoU values to a text file
+    with open('runs/train-seg/exp/ious.txt', 'w') as f:
+        for iou in mean_ious:
+            f.write(f'{iou.item()}\n')
+        f.write(f'Highest IoU: {highest_iou}\n')
+        f.write(f'Last IoU: {last_iou}\n')
+    
+    # Plot IoU values
+    plt.figure(figsize=(10, 6))
+    plt.plot(range(len(mean_ious)), mean_ious.cpu().numpy(), marker='o', linestyle='-', color='blue')
+    plt.xlabel('Predicted Mask Index')
+    plt.ylabel('IoU')
+    plt.title('IoU Trend Across Predicted Masks')
+    plt.grid(True)
+    
+    # Save the plot as iou.png
+    plt.savefig('runs/train-seg/exp/iou.png')
