@@ -94,8 +94,7 @@ LOCAL_RANK = int(os.getenv("LOCAL_RANK", -1))  # https://pytorch.org/docs/stable
 RANK = int(os.getenv("RANK", -1))
 WORLD_SIZE = int(os.getenv("WORLD_SIZE", 1))
 GIT_INFO = check_git_info()
-
-
+    
 def train(hyp, opt, device, callbacks):
     """
     Trains the YOLOv5 model on a dataset, managing hyperparameters, model optimization, logging, and validation.
