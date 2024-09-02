@@ -33,6 +33,8 @@ import torch.nn as nn
 import yaml
 from torch.optim import lr_scheduler
 from tqdm import tqdm
+import matplotlib.pyplot as plt
+
 
 FILE = Path(__file__).resolve()
 ROOT = FILE.parents[1]  # YOLOv5 root directory
@@ -758,39 +760,45 @@ def run(**kwargs):
     main(opt)
     return opt
 
+def calculate_iou_for_dataset(pred_masks, gt_masks):
+    def mask_iou(pred_mask, gt_mask):
+        pred_mask = pred_mask.cpu().numpy()
+        gt_mask = gt_mask.cpu().numpy()
+        
+        intersection = np.logical_and(pred_mask, gt_mask)
+        union = np.logical_or(pred_mask, gt_mask)
+        iou = np.sum(intersection) / np.sum(union) if np.sum(union) > 0 else 0
+        return iou
+
+    iou_values = [mask_iou(pred, gt) for pred, gt in zip(pred_masks, gt_masks)]
+    return iou_values
+
+def plot_iou(iou_values, filename='iou_plot.png'):
+    """
+    Plot IoU values and save the plot as a PNG file.
+
+    Args:
+        iou_values (list): List of IoU values.
+        filename (str): Name of the file to save the plot.
+    """
+    plt.figure(figsize=(10, 6))
+    plt.plot(iou_values, marker='o', linestyle='-', color='b')
+    plt.xlabel('Index')
+    plt.ylabel('IoU')
+    plt.title('IoU Metrics Plot')
+    plt.grid(True)
+    plt.savefig(filename)  # Save the plot as a PNG file
+    plt.close()  # Close the plot to free up memory
 
 if __name__ == "__main__":
     opt = parse_opt()
     main(opt)
 
-    predicted_masks = torch.randint(0, 2, (5, 160*160)).float()  # Example predicted masks
-    ground_truth_masks = torch.randint(0, 2, (5, 160*160)).float()  # Example ground truth masks
+    pred_masks = torch.randint(0, 2, (5, 160*160)).float()  # Example predicted masks
+    gt_masks = torch.randint(0, 2, (5, 160*160)).float()  # Example ground truth masks
 
-    # Calculate IoU for each pair
-    mean_ious = masks_iou(predicted_masks, ground_truth_masks)
-    
-    # Get the last and highest IoU values
-    last_iou = mean_ious[-1].item()
-    highest_iou = mean_ious.max().item()
-    
-    # Print the values
-    print(f"Last IoU value: {last_iou}")
-    print(f"Highest IoU value: {highest_iou}")
-    
-    # Save the IoU values to a text file
-    with open('runs/train-seg/exp/ious.txt', 'w') as f:
-        for iou in mean_ious:
-            f.write(f'{iou.item()}\n')
-        f.write(f'Highest IoU: {highest_iou}\n')
-        f.write(f'Last IoU: {last_iou}\n')
+    # Calculate IoU values
+    iou_values = calculate_iou_for_dataset(pred_masks, gt_masks)
     
     # Plot IoU values
-    plt.figure(figsize=(10, 6))
-    plt.plot(range(len(mean_ious)), mean_ious.cpu().numpy(), marker='o', linestyle='-', color='blue')
-    plt.xlabel('Predicted Mask Index')
-    plt.ylabel('IoU')
-    plt.title('IoU Trend Across Predicted Masks')
-    plt.grid(True)
-    
-    # Save the plot as iou.png
-    plt.savefig('runs/train-seg/exp/iou.png')
+    plot_iou(iou_values, filename='IoU_plot_train.png')
